@@ -38,7 +38,7 @@ for i in range(len(hf.model.layers)):
     freqs    = torch.outer(t, inv_freq)
     sin_hf   = freqs.sin()[None, None, :, :]
     cos_hf   = freqs.cos()[None, None, :, :]
-    sin_my, cos_my = me.blocks[i].attn._build_rope(T, x.device)
+    sin_my, cos_my = me.blocks[i].attn.build_rope(T, x.device)
     print(" STEP 2 sin max |Δ| =", (sin_hf - sin_my).abs().max().item())
     print(" STEP 2 cos max |Δ| =", (cos_hf - cos_my).abs().max().item())
 

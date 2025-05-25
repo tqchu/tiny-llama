@@ -15,7 +15,25 @@ class MHA(nn.Module):
         self.o_proj = nn.Linear(H * D, cfg.d_model, bias=False)
         self.sin = self.cos = None
 
-    def _build_rope(self, T, device):
+    def rope(self, q: torch.Tensor, k: torch.Tensor, *, pos: [int , None] = None):
+        """
+        Apply rotary embedding to q/k for debugging.
+        q, k : (B, H, T, D)
+        pos   : optional cache-length
+        """
+        B, H, T, D = q.shape
+        T_cache = pos if pos is not None else T
+
+        sin, cos = self.build_rope(T_cache, q.device)
+        # truncate to actual sequence length
+        sin, cos = sin[..., :T, :], cos[..., :T, :]
+
+        # full-dim RoPE via HF rotate_half
+        q_rot = apply_rope(q, sin, cos)
+        k_rot = apply_rope(k, sin, cos)
+        return q_rot, k_rot
+
+    def build_rope(self, T, device):
         if self.sin is None or self.sin.size(1) < T:
             self.sin, self.cos = rope_cache(T, self.d_head, self.cfg.rope_theta, device)
         return self.sin[:, :T], self.cos[:, :T]
@@ -26,7 +44,7 @@ class MHA(nn.Module):
         q = self.q_proj(x).view(B, T, H, D).transpose(1, 2)  # (B, H, T, D)
         k = self.k_proj(x).view(B, T, HK, D).transpose(1, 2)
         v = self.v_proj(x).view(B, T, HK, D).transpose(1, 2)
-        sin, cos = self._build_rope(T, x.device)
+        sin, cos = self.build_rope(T, x.device)
         q, k = apply_rope(q, sin, cos), apply_rope(k, sin, cos)
         # repeat kv heads
         repeat = H // HK
